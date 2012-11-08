@@ -20,7 +20,6 @@ module Rack
                   document.cookie = values[i];
               }
               document.cookie = '_cookieset_=1';
-            
             if(RESEND_REQUEST){
               window.location.reload();
             }
@@ -58,18 +57,26 @@ module Rack
           # Put in patch code
           ## 
           ##
-        
           request = Rack::Request.new(env) 
-          response = Rack::Response.new([], status, headers)
+          #response = Rack::Response.new([], status, headers)
           cookie = String.new
           request.cookies.each_pair do |key,value|
 	            cookie += "#{key}=#{value};"
           end
-          body.each do |part|
-            part.gsub!(/<\/head>/, "#{set_cookie(cookie)}</head>")
-            response.write(part)
+          new_body = []
+          if body.respond_to?(:map)
+            new_body = body.map do |part|
+              part.gsub!(/<\/head>/, "#{set_cookie(cookie)}</head>").gsub(/\n/, '')
+            end
+          else
+            body.each do |line|
+              new_body << line
+            end
           end
-          response.finish
+
+          body.close if body.respond_to?(:close)
+          debugger
+          [status, headers, new_body]
         end
       else
         @app.call(env)
@@ -81,16 +88,19 @@ module Rack
     def code(resend=false)
       regex = "_session_id"
       regex = Rails.configuration.session_options[:key] if Rails.configuration.session_store.name == "ActionDispatch::Session::CookieStore"
-      CODE.gsub('{{RESEND}}', resend.to_s).gsub('{{REGEX}}',regex.to_s)
+      ret = CODE.gsub('{{RESEND}}', resend.to_s).gsub('{{REGEX}}',regex.to_s)
+
+     return ret 
     end
   
    def set_cookie(cookie)
-      COOKIE.gsub('{{COOKIE}}',cookie.to_s)
+      COOKIE.gsub('{{COOKIE}}',cookie.to_s) 
    end
 
     def new_session?(env)
       request = Rack::Request.new(env)
-      if request.cookies['_cookieset_'].nil? 
+
+      if request.cookies['_cookieset_'].nil? and request.cookies['_session_id'].nil?
         true
       else
         false
