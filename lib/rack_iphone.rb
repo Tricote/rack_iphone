@@ -6,6 +6,7 @@ module Rack
         var RESEND_REQUEST = {{RESEND}};
 
         function isFullScreen(){
+          return true; // TD TODO
           return navigator.userAgent.match(/WebKit.*Mobile/) &&
                  !navigator.userAgent.match(/Safari/);
         }
@@ -33,7 +34,7 @@ module Rack
          <script type="text/javascript"> 
             (function(){
                var COOKIE = "{{COOKIE}}";
-	       var lastCookie = null;
+         var lastCookie = null;
                setInterval(function(){
                if(lastCookie != ''+COOKIE){
                  lastCookie = ''+COOKIE;
@@ -51,32 +52,24 @@ module Rack
     def call(env)
       if iphone_web_app?(env)
         if new_session?(env)
-          [200,{'Content-Length' => code(true).length.to_s, 'Content-Type' => 'text/html'}, code(true)]
+          [200,{'Content-Length' => code(true).length.to_s, 'Content-Type' => 'text/html'}, [code(true)]]
         else
           status, headers, body = @app.call(env)
           # Put in patch code
           ## 
           ##
+        
           request = Rack::Request.new(env) 
-          #response = Rack::Response.new([], status, headers)
+          response = Rack::Response.new([], status, headers)
           cookie = String.new
           request.cookies.each_pair do |key,value|
-	            cookie += "#{key}=#{value};"
+              cookie += "#{key}=#{value};"
           end
-          new_body = []
-          if body.respond_to?(:map)
-            new_body = body.map do |part|
-              part.gsub!(/<\/head>/, "#{set_cookie(cookie)}</head>").gsub(/\n/, '')
-            end
-          else
-            body.each do |line|
-              new_body << line
-            end
+          body.each do |part|
+            part.gsub!(/<\/head>/, "#{set_cookie(cookie)}</head>")
+            response.write(part)
           end
-
-          body.close if body.respond_to?(:close)
-          debugger
-          [status, headers, new_body]
+          response.finish
         end
       else
         @app.call(env)
@@ -87,7 +80,7 @@ module Rack
   
     def code(resend=false)
       regex = "_session_id"
-      regex = Rails.configuration.session_options[:key] if Rails.configuration.session_store.name == "ActionDispatch::Session::CookieStore"
+      # regex = Rails.configuration.session_options[:key] if Rails.configuration.session_store.name == "ActionDispatch::Session::CookieStore"
       ret = CODE.gsub('{{RESEND}}', resend.to_s).gsub('{{REGEX}}',regex.to_s)
 
      return ret 
@@ -108,6 +101,7 @@ module Rack
     end
   
     def iphone_web_app?(env)
+      return true
       if env['HTTP_USER_AGENT']
         env['HTTP_USER_AGENT'] =~ /WebKit.*Mobile/ && !(env['HTTP_USER_AGENT'] =~ /Safari/)
       end
